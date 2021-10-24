@@ -5,7 +5,9 @@ using UnityEngine.Rendering;
 
 public class Desert : MonoBehaviour
 {
-    public float NoiseScale = 1.0f;
+    public Vector2 NoiseScale = Vector2.one;
+    public float Warp_NoiseScale = 1.0f;
+    public float WarpIntensity = 0.0f;
     public Material Material;
     public int Width = 100;
     public int Depth = 100;
@@ -14,6 +16,22 @@ public class Desert : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        //GenerateDesert();
+    }
+
+   
+
+    private void OnValidate()
+    {
+        GenerateDesert();
+    }
+
+    private void GenerateDesert()
+    {
+
+        if (Material == null)
+            return;
+
         List<Vector3> vertices = new List<Vector3>();
         List<int> triangles = new List<int>();
         List<Vector2> uv = new List<Vector2>();
@@ -21,9 +39,12 @@ public class Desert : MonoBehaviour
         {
             for (int j = 0; j < Depth; j++)
             {
-                float xCoord = (i / (float)Width) * NoiseScale;
-                float yCoord = (j / (float)Depth) * NoiseScale;
-                float y = Height * Mathf.PerlinNoise(xCoord, yCoord);
+                float xCoord = (i / (float)Width) * NoiseScale.x;
+                float yCoord = (j / (float)Depth) * NoiseScale.y;
+
+                float warp = Mathf.PerlinNoise((i / (float)Width) * Warp_NoiseScale, (j / (float)Depth) * Warp_NoiseScale);
+
+                float y = Height * Mathf.PerlinNoise(xCoord+(warp*WarpIntensity), yCoord);
 
                 vertices.Add(new Vector3(i - Width * 0.5f, y, j - Depth * 0.5f));
                 uv.Add(new Vector2((float)i / Width, (float)j / Depth));
@@ -41,15 +62,20 @@ public class Desert : MonoBehaviour
         mesh.uv = uv.ToArray();
         mesh.triangles = triangles.ToArray();
         mesh.RecalculateNormals();
-        
 
-        MeshFilter meshFilter = gameObject.AddComponent<MeshFilter>();
-        Renderer ren = gameObject.AddComponent<MeshRenderer>();
+        Renderer ren = gameObject.GetComponent<Renderer>();
         ren.shadowCastingMode = ShadowCastingMode.Off;
         ren.receiveShadows = false;
         ren.lightProbeUsage = LightProbeUsage.Off;
         ren.reflectionProbeUsage = ReflectionProbeUsage.Off;
         ren.material = Material;
+
+        MeshFilter meshFilter = gameObject.GetComponent<MeshFilter>();      
         meshFilter.mesh = mesh;
+
+        MeshCollider meshCollider = gameObject.GetComponent<MeshCollider>();
+        meshCollider.sharedMesh = mesh;
+        meshCollider.isTrigger = false;
+        meshCollider.convex = false;
     }
 }
