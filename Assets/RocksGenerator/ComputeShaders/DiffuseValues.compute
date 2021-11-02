@@ -1,0 +1,87 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Diffuse
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+Texture3D<float4> _Values;
+RWTexture3D<float4> _Result;
+
+int _Resolution;
+
+float _GroundLevel;
+
+bool OutOfBounds(int3 coords)
+{
+    return
+        coords.x == 0 || coords.x == _Resolution ||
+        coords.y == 0 || coords.y == _Resolution ||
+        coords.z == 0 || coords.z == _Resolution;
+}
+
+[numthreads(8,8,8)]
+void Diffuse (uint3 id : SV_DispatchThreadID)
+{
+    if (OutOfBounds(int3(id)))
+        return;
+
+    float minDist = _Resolution * 4.0;
+    float3 direction = float3(0, 0, 0);
+    bool inside = _Values[id].r >= _GroundLevel;
+    bool found = false;
+
+    //search in a "circular" pattern
+
+    //*******************************************************************************//
+    // Evil approximation here...a box is not a sphere. The nice thing is that the   //                                                                          
+    // we lose precision the more we increase search radius and we are more          //                                                                   
+    // interested in the values near the surface. A better implementation could      //   
+    // use boxes (inner and outer) to find an interval for a true spherical search   //
+    // and then consider only cells that are part of the sphere.                     //
+    //*******************************************************************************//
+
+    for (int radius = 0; radius < _Resolution; radius++)
+    {
+
+        for (int x = -radius ; x <= radius; x++)
+        {
+            for (int y = -radius ; y <= radius; y++)
+            {
+                for (int z = -radius ; z <= radius; z++)
+                {
+                    if (abs(x) == radius ||
+                        abs(y) == radius ||
+                        abs(z) == radius)
+                    {
+                        int3 coords = int3(id.x + x, id.y + y, id.z + z);
+
+                        if (OutOfBounds(coords))
+                            continue;
+                        
+                        if ((inside && _Values[coords].r < _GroundLevel) ||
+                            (!inside && _Values[coords].r > _GroundLevel))
+                        {
+                            float3 dir = coords - float3(id);
+                            float dist = length(dir);
+                            if (dist < minDist)
+                            {
+                                found = true;
+                                minDist = dist;
+                                direction = dir;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+        if (found)
+            break;
+    }
+
+    if (found)
+        _Result[int3(id)] = float4(normalize(direction), minDist * (inside ? -1.0 : 1.0));
+    else
+        _Result[int3(id)] = float4(1,0,0,1);
+
+}

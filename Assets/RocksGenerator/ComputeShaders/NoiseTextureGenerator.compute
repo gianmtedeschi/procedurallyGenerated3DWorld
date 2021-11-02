@@ -1,0 +1,28 @@
+#include "Assets\RocksGenerator\ComputeShaders\Noise\ClassicNoise3D.hlsl"
+
+#pragma exclude_renderers d3d11_9x
+#pragma exclude_renderers d3d9
+#pragma target 5.0
+#pragma kernel GenerateNoise
+
+
+RWTexture3D<float4> _NoiseTexture;
+uint _Resolution;
+
+[numthreads(8, 8, 8)]
+void GenerateNoise(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
+		return;
+	
+		float3 coords = float3(
+			id.x / float(_Resolution),
+			id.y / float(_Resolution),
+			id.z / float(_Resolution)
+			)*2;
+
+	_NoiseTexture[int3(id.x, id.y, id.z)] = float4(PeriodicNoise(coords, float3(2, 2, 2)),0,0,0);
+
+	
+
+}

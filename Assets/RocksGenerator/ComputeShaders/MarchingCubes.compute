@@ -1,0 +1,276 @@
+// Each #kernel tells which function to compile; you can have many 
+#include "Assets\RocksGenerator\ComputeShaders\MarchingCubes_Common.hlsl"
+#include "Assets\RocksGenerator\ComputeShaders\Noise\ClassicNoise3D.hlsl"
+#pragma exclude_renderers d3d11_9x
+#pragma exclude_renderers d3d9
+#pragma target 5.0
+#pragma kernel SampleNoise
+
+//SDF
+SamplerState SDFLinearClampSampler; // boia https://docs.unity3d.com/Manual/SL-SamplerStates.html
+Texture3D<float4> _SDF;
+RWTexture3D<float4> _FullSdf;
+
+
+// Nosie Generation
+uint _Splits;
+uint _Resolution;
+float _Scale;
+int _NumLayers;
+float3 _CoordsOffset;
+float _GroundLevel;
+
+RWStructuredBuffer<GRIDCELL> _Cells;
+StructuredBuffer<NOISE_LAYER_PARAMS> _NoiseParams;
+
+
+float3 GetNoiseCoords(float3 baseCoords, NOISE_LAYER_PARAMS params)
+{
+
+    float3 warp = float3(
+        ClassicNoise((baseCoords)*params.warpScale.x),
+        ClassicNoise((baseCoords + float3(5, 5, 5)) * params.warpScale.y),
+        ClassicNoise((baseCoords - float3(11, 11, 11)) * params.warpScale.z)
+        );
+
+    return float3
+        (
+            params.offset.x + (baseCoords.x * params.scale.x),
+            params.offset.y + (baseCoords.y * params.scale.y),
+            params.offset.z + (baseCoords.z * params.scale.z)
+            ) + (warp * params.warpInfluence);
+}
+
+float4 GetLayerValue(float3 coords,
+    NOISE_LAYER_PARAMS layerParams,
+    float scale, int splits)
+{
+
+    float4 value = float4(0, 0, 0, 0);
+
+    float3 noiseCoords = GetNoiseCoords(coords, layerParams);
+
+    float heightFactor = 0;
+
+    if (((layerParams.height - 1) <= 0.000001) && ((layerParams.height - 1) >= -0.000001))
+    {
+        heightFactor = 1.0f;
+    }
+    else
+    {
+        heightFactor = layerParams.height > 0
+            ? max(1 - (coords.y / (scale * splits * layerParams.height)), 0.0f)
+            : 1 - max(1 - (coords.y / (scale * splits * (-layerParams.height))), 0.0f);
+    }
+
+    float noise = (heightFactor * ClassicNoise(noiseCoords));
+
+    value.x = (layerParams.influence * noise);
+  
+    return value;
+
+}
+
+
+bool IsBoundary(uint x, uint y, uint z, float scale, int resolution, float3 offset, int splits)
+{
+    int3 coords = int3(
+        x + (int((_CoordsOffset.x + 0.0001) / _Scale) * _Resolution),
+        y + (int((_CoordsOffset.y + 0.0001) / _Scale) * _Resolution),
+        z + (int((_CoordsOffset.z + 0.0001) / _Scale) * _Resolution));
+
+    return
+        coords.x <= 1 || coords.x >= (_Resolution * _Splits) - 2 ||
+        coords.y <= 1 || coords.y >= (_Resolution * _Splits) - 2 ||
+        coords.z <= 1 || coords.z >= (_Resolution * _Splits) - 2;
+
+}
+
+
+float4 GetValue(uint x, uint y, uint z)
+{
+
+    float3 sample_sphere[26] = {
+        float3(-1,-1,-1),
+        float3(0,-1,-1),
+        float3(1,-1,-1),
+        float3(-1,0,-1),
+        float3(0,0,-1),
+        float3(1,0,-1),
+        float3(-1,1,-1),
+        float3(0,1,-1),
+        float3(1,1,-1),
+
+        float3(-1,-1,1),
+        float3(0,-1,1),
+        float3(1,-1,1),
+        float3(-1,0,1),
+        float3(0,0,1),
+        float3(1,0,1),
+        float3(-1,1,1),
+        float3(0,1,1),
+        float3(1,1,1),
+
+        float3(-1,-1,0),
+        float3(0,-1,0),
+        float3(1,-1,0),
+        float3(-1,0,0),
+        float3(1,0,0),
+        float3(-1,1,0),
+        float3(0,1,0),
+        float3(1,1,0)
+        
+    };
+
+    float radius = (_Scale / _Resolution) * 3 ;
+    float aaValues[26] =
+    {
+       0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0,0,
+       0,0,0,0,0,0,0,0
+    };
+
+    float3 coords = GetCoords(x, y, z, _Scale, _Resolution, _CoordsOffset);
+
+    [unroll]
+    for (int k = 0; k < 26; k++)
+    {
+        float3 dir = normalize(sample_sphere[k]);
+        float3 inc = dir * radius;
+        aaValues[k] += SampleSDFLinear(_SDF, SDFLinearClampSampler, GetSDFCoords(coords+inc, _Scale, _Splits));
+        
+    }
+
+    
+    float value = SampleSDFLinear(_SDF, SDFLinearClampSampler, GetSDFCoords(coords, _Scale, _Splits));
+
+    float d = 0.01;
+    float3 coords_dx = GetCoords(x, y, z, _Scale,_Resolution, _CoordsOffset) + float3(d, 0, 0);
+    float3 coords_dy = GetCoords(x, y, z, _Scale,_Resolution, _CoordsOffset) + float3(0, d, 0);
+    float3 coords_dz = GetCoords(x, y, z, _Scale,_Resolution, _CoordsOffset) + float3(0, 0, d);
+
+    float value_dx = SampleSDFLinear(_SDF,SDFLinearClampSampler, GetSDFCoords(coords_dx, _Scale, _Splits));
+    float value_dy = SampleSDFLinear(_SDF,SDFLinearClampSampler, GetSDFCoords(coords_dy, _Scale, _Splits));
+    float value_dz = SampleSDFLinear(_SDF,SDFLinearClampSampler, GetSDFCoords(coords_dz, _Scale, _Splits));
+
+   [loop]
+    for (int i = 0; i < _NumLayers; i++)
+    {
+       
+
+        float4 layerValue = GetLayerValue(coords, _NoiseParams[i], _Scale, _Splits);
+        
+        value += (_NoiseParams[i].influence * layerValue.x);
+
+        [loop]
+        for (int k = 0; k < 26; k++)
+        {
+            float3 dir = normalize(sample_sphere[k]);
+            float3 inc = dir * radius;
+            aaValues[k]+= _NoiseParams[i].influence*GetLayerValue(coords + inc, _NoiseParams[i], _Scale, _Splits).x;
+            
+        }
+
+    }
+
+    int cnt = 0;
+
+    [unroll]
+    for (int k = 0; k < 26; k++)
+    {
+        if (aaValues[k] > _GroundLevel)
+        {
+            cnt++;         
+        }     
+    }
+
+    float aa = float(cnt) / 26;
+
+    return float4(value, aa,aa,aa);
+}
+
+[numthreads(8, 8, 8)]
+void SampleNoise(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
+        return;
+
+    float boundary = false;
+
+    if (IsBoundary(id.x, id.y, id.z, _Scale, _Resolution, _CoordsOffset, _Splits))
+    {
+        boundary = true;
+    }
+    int index = id.x + (id.y * _Resolution) + (id.z * _Resolution * _Resolution);
+
+    GRIDCELL cell;
+
+    cell.p[0] = GetCoords(id.x, id.y, id.z, _Scale,_Resolution, _CoordsOffset);
+    cell.p[1] = GetCoords(id.x + 1, id.y, id.z, _Scale,_Resolution, _CoordsOffset);
+    cell.p[2] = GetCoords(id.x + 1, id.y + 1, id.z, _Scale,_Resolution, _CoordsOffset);
+    cell.p[3] = GetCoords(id.x, id.y + 1, id.z, _Scale,_Resolution, _CoordsOffset);
+    cell.p[4] = GetCoords(id.x, id.y, id.z + 1, _Scale,_Resolution, _CoordsOffset);
+    cell.p[5] = GetCoords(id.x + 1, id.y, id.z + 1, _Scale,_Resolution, _CoordsOffset);
+    cell.p[6] = GetCoords(id.x + 1, id.y + 1, id.z + 1, _Scale,_Resolution, _CoordsOffset);
+    cell.p[7] = GetCoords(id.x, id.y + 1, id.z + 1, _Scale,_Resolution, _CoordsOffset);
+
+
+
+    float aa = -1;
+    float mean = 0;
+    mean+=cell.val[0] = !boundary ? GetValue(id.x, id.y, id.z) : _GroundLevel-1;
+    mean+=cell.val[1] = !boundary ? GetValue(id.x + 1, id.y, id.z) : _GroundLevel - 1;
+    mean+=cell.val[2] = !boundary ? GetValue(id.x + 1, id.y + 1, id.z) : _GroundLevel - 1;
+    mean+=cell.val[3] = !boundary ? GetValue(id.x, id.y + 1, id.z) : _GroundLevel - 1;
+    mean+=cell.val[4] = !boundary ? GetValue(id.x, id.y, id.z + 1) : _GroundLevel - 1;
+    mean+=cell.val[5] = !boundary ? GetValue(id.x + 1, id.y, id.z + 1) : _GroundLevel - 1;
+    mean+=cell.val[6] = !boundary ? GetValue(id.x + 1, id.y + 1, id.z + 1) : _GroundLevel - 1;
+    mean+=cell.val[7] = !boundary ? GetValue(id.x, id.y + 1, id.z + 1) : _GroundLevel - 1;
+
+    _FullSdf[
+        int3(
+            id.x + (int((_CoordsOffset.x + 0.01) / _Scale) * _Resolution),
+            id.y + (int((_CoordsOffset.y + 0.01) / _Scale) * _Resolution),
+            id.z + (int((_CoordsOffset.z + 0.01) / _Scale) * _Resolution))] = float4(mean/8.0,0, 0, 0);
+
+    TRIANGLE_LIST tris;
+
+    tris.tris[0].v[0].p = float3(0, 0, 0);
+    tris.tris[0].v[0].n = float3(0, 0, 0);
+    tris.tris[0].v[1].p = float3(0, 0, 0);
+    tris.tris[0].v[1].n = float3(0, 0, 0);
+    tris.tris[0].v[2].p = float3(0, 0, 0);
+    tris.tris[0].v[2].n = float3(0, 0, 0);
+
+    tris.tris[1].v[0].p = float3(0, 0, 0);
+    tris.tris[1].v[0].n = float3(0, 0, 0);
+    tris.tris[1].v[1].p = float3(0, 0, 0);
+    tris.tris[1].v[1].n = float3(0, 0, 0);
+    tris.tris[1].v[2].p = float3(0, 0, 0);
+    tris.tris[1].v[2].n = float3(0, 0, 0);
+
+    tris.tris[2].v[0].p = float3(0, 0, 0);
+    tris.tris[2].v[0].n = float3(0, 0, 0);
+    tris.tris[2].v[1].p = float3(0, 0, 0);
+    tris.tris[2].v[1].n = float3(0, 0, 0);
+    tris.tris[2].v[2].p = float3(0, 0, 0);
+    tris.tris[2].v[2].n = float3(0, 0, 0);
+
+    tris.tris[3].v[0].p = float3(0, 0, 0);
+    tris.tris[3].v[0].n = float3(0, 0, 0);
+    tris.tris[3].v[1].p = float3(0, 0, 0);
+    tris.tris[3].v[1].n = float3(0, 0, 0);
+    tris.tris[3].v[2].p = float3(0, 0, 0);
+    tris.tris[3].v[2].n = float3(0, 0, 0);
+
+    tris.tris[4].v[0].p = float3(0, 0, 0);
+    tris.tris[4].v[0].n = float3(0, 0, 0);
+    tris.tris[4].v[1].p = float3(0, 0, 0);
+    tris.tris[4].v[1].n = float3(0, 0, 0);
+    tris.tris[4].v[2].p = float3(0, 0, 0);
+    tris.tris[4].v[2].n = float3(0, 0, 0);
+
+    int count = -5;
+
+    _Cells[index] = cell;
+}

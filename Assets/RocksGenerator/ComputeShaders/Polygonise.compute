@@ -1,0 +1,31 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#include "Assets\RocksGenerator\ComputeShaders\MarchingCubes_Common.hlsl"
+#include "Assets\RocksGenerator\ComputeShaders\Polygonise.hlsl"
+#pragma exclude_renderers d3d11_9x
+#pragma exclude_renderers d3d9
+#pragma target 5.0
+#pragma kernel Polygonise
+
+
+float _Scale;
+float _GroundLevel;
+uint _Resolution;
+
+StructuredBuffer<GRIDCELL> _Cells;
+RWStructuredBuffer<TRIANGLE_LIST> _TriangleList;
+
+
+[numthreads(8, 8, 8)]
+void Polygonise(uint3 id : SV_DispatchThreadID)
+{
+
+    if (id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
+        return;
+
+    int index = id.x + (id.y * _Resolution) + (id.z * _Resolution * _Resolution);
+    int count = 0;
+
+    _TriangleList[index] = Polygonise(_Cells[index], _GroundLevel, _Scale, count);
+    
+}
+

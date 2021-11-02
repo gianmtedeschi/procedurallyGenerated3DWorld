@@ -1,0 +1,112 @@
+#include "Assets\RocksGenerator\ComputeShaders\MarchingCubes_Common.hlsl"
+
+#pragma exclude_renderers d3d11_9x
+#pragma exclude_renderers d3d9
+#pragma target 5.0
+#pragma kernel GenerateSDF
+
+// General
+uint _Splits;
+uint _Resolution;
+float _Scale;
+
+// SDF Generation
+float _PoissonEdgeLen;
+uint _PoissonNumCellsX;
+uint _PoissonNumCellsY;
+float _HeightMultiplier;
+float _HeightMin;
+
+StructuredBuffer<int> _PoissonSortedIndices;
+StructuredBuffer<POISSON_CELL_DELIMITER> _PoissonCellDelimiters;
+StructuredBuffer<POISSON_POINT> _PoissonPoints;
+
+// 3D texture params
+RWTexture3D<float4> _SDF;
+
+
+float BaseShape(float3 coords)
+{
+
+    int maxRings = int(max(_PoissonNumCellsX, _PoissonNumCellsY) / 2.0) + 1;
+
+    float minDist = _Scale * _Splits * 2; // to be sure that any valid distance will be less than that
+    float minRadius;
+
+    bool found = false;
+    bool shouldQuit = false;
+    int2 cellIndex = int2(int(coords.x / _PoissonEdgeLen), int(coords.z / _PoissonEdgeLen));
+
+    [loop]
+    for (int ring = 0; ring <= maxRings; ring++) // searching in a circular pattern increasing ring size (funny thing: it doesn't make sense in this scenario, see comment below)
+    {
+        POISSON_CELL_DELIMITER delimiter;
+        [loop]
+        for (int u = -ring; u <= ring; u++)
+        {
+            for (int v = -ring; v <= ring; v++)
+            {
+                if ((cellIndex.x + u) < _PoissonNumCellsX && (cellIndex.y + v) < _PoissonNumCellsY && ((abs(u) == abs(ring)) || (abs(v) == abs(ring))))
+                {
+                    delimiter = _PoissonCellDelimiters[(cellIndex.x + u) + ((cellIndex.y + v) * _PoissonNumCellsX)];
+                    [loop]
+                    for (int i = delimiter.startIndex; i < delimiter.endIndex; i++)
+                    {
+                        int pointIndex = _PoissonSortedIndices[i];
+
+                        POISSON_POINT p = _PoissonPoints[pointIndex];
+
+                        //SDF for cylinder (almost...the bottom part is bad for us)
+                        //could have been written WAY better
+                        //see:https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
+                        float distH = (coords.y - ((p.radius - _HeightMin) * exp(_HeightMultiplier*(p.radius- _HeightMin))));
+                        float distR = distance(p.position, coords.xz) - p.radius;
+                        float distance;
+
+                        if (distR < 0 && distH < 0) //inside the cylinder
+                            distance = -min(abs(distR), abs(distH));
+
+                        else if (distR > 0 && distH > 0)
+                            distance = sqrt(pow(distR, 2) + pow(distH, 2));
+
+                        else
+                            distance = max(distR, distH);
+
+
+                        if (distance < minDist)
+                        {
+                            minDist = distance;
+                            minRadius = p.radius;
+
+                            found = true;
+                        }
+
+                    }
+                }
+            }
+        }
+
+        if (shouldQuit)
+            //break; nope....it doesn't work, not considering height
+
+        if (found)
+            shouldQuit = true;
+    }
+    return -minDist;
+}
+
+
+[numthreads(8, 8, 8)]
+void GenerateSDF(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution || id.z >= _Resolution)
+        return;
+
+    float3 coords = GetCoords(id.x, id.y, id.z,_Scale*_Splits, _Resolution, float3(0,0,0));
+
+    float value = BaseShape(coords);
+
+    _SDF[id.xyz] = float4(value,0,0,0);
+
+}
