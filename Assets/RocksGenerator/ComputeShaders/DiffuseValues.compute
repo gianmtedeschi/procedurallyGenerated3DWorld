@@ -1,87 +1,81 @@
-// Each #kernel tells which function to compile; you can have many kernels
+//https://prideout.net/blog/distance_fields/
 #pragma kernel Diffuse
+#pragma kernel FindInner;
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
+int incrementX;
+int incrementY;
+int incrementZ;
+float dist;
+int _Resolution;
+float _GroundLevel;
+
+
 Texture3D<float4> _Values;
+
+// do I really need another one (read/write collision....ok but what if happens? does it matter for the algorithm)?
 RWTexture3D<float4> _Result;
 
-int _Resolution;
+Texture3D<float4> _ReadTex;
+RWTexture3D<float4> _WriteTex;
 
-float _GroundLevel;
+bool OnBounds(int3 coords)
+{
+    return
+        coords.x == 0 || coords.x == _Resolution - 1 ||
+        coords.y == 0 || coords.y == _Resolution - 1 ||
+        coords.z == 0 || coords.z == _Resolution - 1;
+}
 
 bool OutOfBounds(int3 coords)
 {
     return
-        coords.x == 0 || coords.x == _Resolution ||
-        coords.y == 0 || coords.y == _Resolution ||
-        coords.z == 0 || coords.z == _Resolution;
+        coords.x > _Resolution - 1 ||
+        coords.y > _Resolution - 1 ||
+        coords.z > _Resolution - 1;
 }
 
-[numthreads(8,8,8)]
-void Diffuse (uint3 id : SV_DispatchThreadID)
+[numthreads(8, 8, 8)]
+void FindInner(uint3 id : SV_DispatchThreadID)
 {
     if (OutOfBounds(int3(id)))
         return;
 
-    float minDist = _Resolution * 4.0;
-    float3 direction = float3(0, 0, 0);
-    bool inside = _Values[id].r >= _GroundLevel;
-    bool found = false;
+    if (OnBounds(int3(id)))
+        _Result[id] = float4(0, 0, 0, 0);
 
-    //search in a "circular" pattern
+    else if (_Values[id].r >= _GroundLevel)
+        _Result[id] = float4(0, 0, 0, 0);
+    else
+        _Result[id] = float4(_Resolution * _Resolution, _Resolution * _Resolution, _Resolution * _Resolution, 1.0);
 
-    //*******************************************************************************//
-    // Evil approximation here...a box is not a sphere. The nice thing is that the   //                                                                          
-    // we lose precision the more we increase search radius and we are more          //                                                                   
-    // interested in the values near the surface. A better implementation could      //   
-    // use boxes (inner and outer) to find an interval for a true spherical search   //
-    // and then consider only cells that are part of the sphere.                     //
-    //*******************************************************************************//
+}
 
-    for (int radius = 0; radius < _Resolution; radius++)
+
+
+[numthreads(8, 8, 8)]
+void Diffuse(uint3 id : SV_DispatchThreadID)
+{
+    if (OutOfBounds(int3(id)))
+        return;
+
+    float3 a, b;
+    a = b = _Resolution * _Resolution * float3(1, 1, 1);
+
+
+    int3 positiveOffset = int3(id)+int3(incrementX, incrementY, incrementZ);
+    if (!OutOfBounds(positiveOffset))
     {
-
-        for (int x = -radius ; x <= radius; x++)
-        {
-            for (int y = -radius ; y <= radius; y++)
-            {
-                for (int z = -radius ; z <= radius; z++)
-                {
-                    if (abs(x) == radius ||
-                        abs(y) == radius ||
-                        abs(z) == radius)
-                    {
-                        int3 coords = int3(id.x + x, id.y + y, id.z + z);
-
-                        if (OutOfBounds(coords))
-                            continue;
-                        
-                        if ((inside && _Values[coords].r < _GroundLevel) ||
-                            (!inside && _Values[coords].r > _GroundLevel))
-                        {
-                            float3 dir = coords - float3(id);
-                            float dist = length(dir);
-                            if (dist < minDist)
-                            {
-                                found = true;
-                                minDist = dist;
-                                direction = dir;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-
-        if (found)
-            break;
+        a = _ReadTex[positiveOffset].rgb + float3(dist * incrementX, dist * incrementY, dist * incrementZ);
     }
 
-    if (found)
-        _Result[int3(id)] = float4(normalize(direction), minDist * (inside ? -1.0 : 1.0));
-    else
-        _Result[int3(id)] = float4(1,0,0,1);
+    int3 negativeOffset = int3(id)-int3(incrementX, incrementY, incrementZ);
+    if (!OutOfBounds(negativeOffset))
+    {
+        b = _ReadTex[negativeOffset].rgb - float3(dist * incrementX, dist * incrementY, dist * incrementZ);
+    }
 
+    if (min(length(a), length(b)) < length(_ReadTex[id].rgb))
+        _WriteTex[id] = length(a) < length(b) ? float4(a, length(a)) : float4(b, length(b));
+    else
+        _WriteTex[id] = _ReadTex[id];
 }

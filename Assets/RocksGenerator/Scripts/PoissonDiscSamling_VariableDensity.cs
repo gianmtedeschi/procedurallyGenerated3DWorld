@@ -8,12 +8,14 @@ namespace Distributions.PoissonDiscSampling_VariableDensity
 {
     public static class PoissonDiscSamling_VariableDensity
     {
-        public static Tuple<Vector2, float>[] PoissonDistribute(Vector2 origin, Vector2 size,
+        public static Tuple<Vector2, float>[] PoissonDistribute(uint seed, Vector2 origin, Vector2 size,
                     float rMin, float rMax, float densityNoiseScale, 
                     out List<int>[,] gridCells, out int numCells_x, out int numCells_y, out float cellEdge, AnimationCurve ac)
         {
 
-            Random rnd = new Random(1);
+            Random rnd = new Random(seed);
+
+            float offset = rnd.NextFloat(0, size.x*size.x*size.x);
 
             // variables initialization
             float edgeLen = rMax /*/ Mathf.Sqrt(2)*/;
@@ -43,7 +45,7 @@ namespace Distributions.PoissonDiscSampling_VariableDensity
             Vector2 initPoint = new Vector2(origin.x + (rnd.NextFloat()%size.x),
                                            origin.y + (rnd.NextFloat() % size.y));
 
-            points.Add(new Tuple<Vector2, float>(initPoint, SampleNoise(initPoint.x, initPoint.y, rMin, rMax, densityNoiseScale, ac)));
+            points.Add(new Tuple<Vector2, float>(initPoint, SampleNoise(offset, initPoint.x, initPoint.y, rMin, rMax, densityNoiseScale, ac)));
 
             tempPoints.Add(0);
 
@@ -73,7 +75,7 @@ namespace Distributions.PoissonDiscSampling_VariableDensity
 
                     Vector2 candidatePosition = currentPoint + randomDir *rnd.NextFloat(currentRadius, currentRadius*2);
 
-                    float candidateRadius = SampleNoise(candidatePosition.x, candidatePosition.y, rMin, rMax, densityNoiseScale, ac);
+                    float candidateRadius = SampleNoise(offset, candidatePosition.x, candidatePosition.y, rMin, rMax, densityNoiseScale, ac);
 
                     if (IsValid(candidatePosition, candidateRadius, origin, size, grid, edgeLen,numCellsX, numCellsY, points))
                     {
@@ -105,9 +107,9 @@ namespace Distributions.PoissonDiscSampling_VariableDensity
             return points.ToArray();
         }
 
-        private static float SampleNoise(float u, float v, float rMin, float rMax, float scale, AnimationCurve ac)
+        private static float SampleNoise(float offset, float u, float v, float rMin, float rMax, float scale, AnimationCurve ac)
         {
-            return Mathf.Lerp(rMin, rMax, ac.Evaluate(Mathf.PerlinNoise(u * scale, v * scale)));
+            return Mathf.Lerp(rMin, rMax, ac.Evaluate(Mathf.PerlinNoise((u+offset) * scale , (v+offset) * scale )));
         }
 
         private static bool IsValid(Vector2 candidatePosition, float candidateRadius, Vector2 origin, Vector2 size, List<int>[,] grid, float edgeLen,int numCells_x, int numCells_y, List<Tuple<Vector2, float>> points)

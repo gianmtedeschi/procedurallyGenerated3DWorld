@@ -6,12 +6,15 @@ using System;
 using Distributions.PoissonDiscSampling_VariableDensity;
 using Random = Unity.Mathematics.Random;
 using UnityEditor;
+using System.Runtime.InteropServices;
+using Unity.Collections;
 
 [Serializable]
 public struct RemovalParams
 {
     public float NoiseScale;
-
+    [Range(0, 1)]
+    public float Margin;
     [Range(0, 1)]
     public float Threshold;
 }
@@ -33,6 +36,7 @@ public struct NOISE_LAYER_PARAMS
 public class MarchingCubes : MonoBehaviour
 {
     [Header("General")]
+    public uint seed;
     public float size;
     [Space(20)]
     [Range(10, 300)]
@@ -65,6 +69,11 @@ public class MarchingCubes : MonoBehaviour
     [Range(0, 50)]
     public float heightMultiplier;
     public NOISE_LAYER_PARAMS[] layers;
+
+    [Header("Ground")]
+    [Range(0, 10)]
+    public float groundHeight;
+    public Texture2D GroundTexture;
 
     [Header("sdf Generation")]
     public int sdfTexResolution;
@@ -99,7 +108,8 @@ public class MarchingCubes : MonoBehaviour
 
     //Mesh
     Mesh[] meshes;
-    Mesh collisionMesh;
+    Mesh[] collisionMeshes;
+    Mesh collisionMeshWelded;
     GameObject[] children;
 
     public void OnValidate()
@@ -121,27 +131,27 @@ public class MarchingCubes : MonoBehaviour
         #region Meshes
         if (meshes != null && meshes.Length > 0)
         {
-            CombineInstance[] collisionMeshes = new CombineInstance[meshes.Length];
+            CombineInstance[] collisionCombineInstance = new CombineInstance[collisionMeshes.Length];
 
             for (int i = 0; i < meshes.Length; i++)
             {
-                collisionMeshes[i] = new CombineInstance();
-                collisionMeshes[i].mesh = new Mesh();
-                collisionMeshes[i].mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-                collisionMeshes[i].mesh.vertices = meshes[i].vertices;
-                collisionMeshes[i].mesh.triangles = meshes[i].triangles;
-                collisionMeshes[i].mesh.normals = meshes[i].normals;
-                collisionMeshes[i].transform = Matrix4x4.identity;
+                collisionCombineInstance[i] = new CombineInstance();
+                collisionCombineInstance[i].mesh = new Mesh();
+                collisionCombineInstance[i].mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                collisionCombineInstance[i].mesh.vertices = collisionMeshes[i].vertices;
+                collisionCombineInstance[i].mesh.triangles = collisionMeshes[i].triangles;
+                collisionCombineInstance[i].mesh.normals = collisionMeshes[i].normals;
+                collisionCombineInstance[i].transform = Matrix4x4.identity;
 
-                WeldVertices(collisionMeshes[i].mesh);
+                WeldVertices(collisionCombineInstance[i].mesh);
 
 
             }
 
-            collisionMesh = new Mesh();
-            collisionMesh.CombineMeshes(collisionMeshes);
-            collisionMesh.RecalculateNormals();
-            collisionMesh.RecalculateBounds();
+            collisionMeshWelded = new Mesh();
+            collisionMeshWelded.CombineMeshes(collisionCombineInstance);
+            collisionMeshWelded.RecalculateNormals();
+            collisionMeshWelded.RecalculateBounds();
 
             // mesh for collisions
             if (AssetDatabase.LoadAssetAtPath($@"{parentFolder}\{folderName}\collisionMesh.asset", typeof(Mesh))!=null)
@@ -151,7 +161,7 @@ public class MarchingCubes : MonoBehaviour
                 
             }
 
-            AssetDatabase.CreateAsset(collisionMesh, $@"{parentFolder}\{folderName}\collisionMesh.asset");
+            AssetDatabase.CreateAsset(collisionMeshWelded, $@"{parentFolder}\{folderName}\collisionMesh.asset");
 
             // meshes
             for (int i = 0; i < meshes.Length; i++)
@@ -176,7 +186,32 @@ public class MarchingCubes : MonoBehaviour
         {
             Texture3D tex = new Texture3D(_fullSdf.width, _fullSdf.height, _fullSdf.volumeDepth, _fullSdf.graphicsFormat, 0);
 
-            Graphics.CopyTexture(_fullSdf, tex);
+            Texture2D slice = new Texture2D(_fullSdf.width, _fullSdf.height, _fullSdf.graphicsFormat, UnityEngine.Experimental.Rendering.TextureCreationFlags.None);
+            
+            RenderTexture sliceRender = new RenderTexture(_fullSdf.width, _fullSdf.height, 0, _fullSdf.graphicsFormat, 0);
+
+            List<float[]> rawData = new List<float[]>();
+
+            //*****************************************************************************************************//
+            //    Graphics.Copy works fine for copying as long as the GPU-side exists (at least it looks like)     //
+            //    Didn't know how to update the CPU-side part of the texture and Texture3D doesn't have ReadPixels //
+            //    Reading one slice at a time + call to ReadPixels maybe is not the best approach but it works     //
+            //    (The big problem is that I don't know how unity stores textures internally)                      //
+            //*****************************************************************************************************//
+            for (int i = 0; i < _fullSdf.volumeDepth; i++)
+            {     
+                Graphics.CopyTexture(_fullSdf, i, sliceRender, 0);
+
+                RenderTexture.active = sliceRender;
+
+                slice.ReadPixels(new Rect(0, 0, sliceRender.width, sliceRender.height), 0, 0);
+
+                rawData.Add(slice.GetPixelData<float>(0).ToArray());
+            }
+
+            tex.SetPixelData<float>(rawData.SelectMany(x => x).ToArray(), 0);
+
+            tex.Apply();
 
             if (AssetDatabase.LoadAssetAtPath($@"{parentFolder}\{folderName}\fullSDF.asset", typeof(Texture3D)) != null)
             {
@@ -305,7 +340,8 @@ public class MarchingCubes : MonoBehaviour
         _fullSdfCopy.Create();
 
         meshes = new Mesh[split * split * split];
-
+        collisionMeshes= new Mesh[split * split * split];
+        // collision meshes
         for (int x = 0; x < split; x++)
         {
             for (int y = 0; y < split; y++)
@@ -314,7 +350,22 @@ public class MarchingCubes : MonoBehaviour
                 {
                     Vector3 offset = new Vector3(x, y, z) * size;
 
-                    meshes[x + (y * split) + (z * split * split)]= GenerateGeometry(offset);
+                    collisionMeshes[x + (y * split) + (z * split * split)] = GenerateGeometry(offset, 64);
+                
+                }
+            }
+        }
+
+        // meshes
+        for (int x = 0; x < split; x++)
+        {
+            for (int y = 0; y < split; y++)
+            {
+                for (int z = 0; z < split; z++)
+                {
+                    Vector3 offset = new Vector3(x, y, z) * size;
+
+                    meshes[x + (y * split) + (z * split * split)] = GenerateGeometry(offset, resolution);
 
                     children[x + (y * split) + (z * split * split)].GetComponent<MeshFilter>().sharedMesh = meshes[x + (y * split) + (z * split * split)];
 
@@ -327,19 +378,97 @@ public class MarchingCubes : MonoBehaviour
 
         // Diffuse sdf values;
 
+        // finding the outer shell
         Graphics.CopyTexture(_fullSdf, _fullSdfCopy);
 
         DiffuseSDF.SetFloat("_GroundLevel", groundLevel);
 
-        DiffuseSDF.SetInt("_Resolution", resolution*split);
+        DiffuseSDF.SetInt("_Resolution", resolution * split);
 
-        DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_Values", _fullSdfCopy);
+        DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("FindInner"), "_Values", _fullSdfCopy);
 
-        DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_Result", _fullSdf);
+        DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("FindInner"), "_Result", _fullSdf);
 
-        DiffuseSDF.Dispatch(DiffuseSDF.FindKernel("Diffuse"), resolution * split / 8, resolution * split / 8, resolution * split / 8);
+        DiffuseSDF.Dispatch(DiffuseSDF.FindKernel("FindInner"), resolution * split / 8, resolution * split / 8, resolution * split / 8);
 
-       
+        // diffusing the values
+
+        int numIterations = 80;
+
+        Graphics.CopyTexture(_fullSdf, _fullSdfCopy);
+
+        for (int i = 1; i < numIterations; i++)
+        {
+            RenderTexture
+                read = i % 2 == 0 ? _fullSdfCopy : _fullSdf,
+                write = i % 2 != 0 ? _fullSdfCopy : _fullSdf;
+
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_ReadTex", read);
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_WriteTex", write);
+
+            int
+                incrementX = 1,
+                incrementY = 0,
+                incrementZ = 0;
+
+            DiffuseSDF.SetInt("incrementX", incrementX);
+            DiffuseSDF.SetInt("incrementY", incrementY);
+            DiffuseSDF.SetInt("incrementZ", incrementZ);
+
+            DiffuseSDF.SetFloat("dist", (1.0f / resolution));
+
+            DiffuseSDF.Dispatch(DiffuseSDF.FindKernel("Diffuse"), resolution * split / 8, resolution * split / 8, resolution * split / 8);
+
+            Graphics.CopyTexture(write, read);
+        }
+        for (int i = 1; i < numIterations; i++)
+        {
+            RenderTexture
+                read = i % 2 == 0 ? _fullSdfCopy : _fullSdf,
+                write = i % 2 != 0 ? _fullSdfCopy : _fullSdf;
+
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_ReadTex", read);
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_WriteTex", write);
+
+            int
+                incrementX = 0,
+                incrementY = 1,
+                incrementZ = 0;
+
+            DiffuseSDF.SetInt("incrementX", incrementX);
+            DiffuseSDF.SetInt("incrementY", incrementY);
+            DiffuseSDF.SetInt("incrementZ", incrementZ);
+
+            DiffuseSDF.SetFloat("dist", (1.0f / resolution));
+
+            DiffuseSDF.Dispatch(DiffuseSDF.FindKernel("Diffuse"), resolution * split / 8, resolution * split / 8, resolution * split / 8);
+
+            Graphics.CopyTexture(write, read);
+        }
+        for (int i = 1; i < numIterations; i++)
+        {
+            RenderTexture
+                read = i % 2 == 0 ? _fullSdfCopy : _fullSdf,
+                write = i % 2 != 0 ? _fullSdfCopy : _fullSdf;
+
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_ReadTex", read);
+            DiffuseSDF.SetTexture(DiffuseSDF.FindKernel("Diffuse"), "_WriteTex", write);
+
+            int
+                incrementX = 0,
+                incrementY = 0,
+                incrementZ = 1;
+
+            DiffuseSDF.SetInt("incrementX", incrementX);
+            DiffuseSDF.SetInt("incrementY", incrementY);
+            DiffuseSDF.SetInt("incrementZ", incrementZ);
+
+            DiffuseSDF.SetFloat("dist", (1.0f / resolution));
+
+            DiffuseSDF.Dispatch(DiffuseSDF.FindKernel("Diffuse"), resolution * split / 8, resolution * split / 8, resolution * split / 8);
+
+            Graphics.CopyTexture(write, read);
+        }
         #endregion
 
         //Releasing resources
@@ -358,12 +487,22 @@ public class MarchingCubes : MonoBehaviour
        //Generate();
           
     }
-    uint seed = 1;
+
+    private void OnDestroy()
+    {
+        //Releasing resources
+        triangleList?.Release();
+        gridCells?.Release();
+        layersParams?.Release();
+        poisson_SortedIndices?.Release();
+        poisson_CellDelimiters?.Release();
+        poisson_Points?.Release();
+    }
     private Tuple<Vector2, float>[] GetPointDistribution(out int[] indicesSortedByCell, out Tuple<int, int>[] delimiters)
     {
         // Fist we create a "random" point distribution
         Tuple<Vector2, float>[] points =
-            PoissonDiscSamling_VariableDensity.PoissonDistribute(Vector3.zero, Vector3.one * size *split,
+            PoissonDiscSamling_VariableDensity.PoissonDistribute(seed, Vector3.zero, Vector3.one * size *split,
                                                                  minDistance, maxDistance, poisson_noiseScale,
                                                                  out List<int>[,] grid, out poissonNumCellsX, 
                                                                  out poissonNumCellsY, out poissonEdgeLen, distanceDistribution);
@@ -387,7 +526,15 @@ public class MarchingCubes : MonoBehaviour
                 foreach (int index in grid[i, j])
                 {
                     // Filtering initial point distribution
-                    if (points[index].Item2>sitesSelectionParams.Threshold*maxDistance)
+                    if (points[index].Item1.x > (1 - sitesSelectionParams.Margin) * (size * split) ||
+                        points[index].Item1.x < (sitesSelectionParams.Margin) * (size * split) ||
+                        points[index].Item1.y > (1 - sitesSelectionParams.Margin) * (size * split) ||
+                        points[index].Item1.y < (sitesSelectionParams.Margin) * (size * split))
+                    {
+                        continue;
+                    }
+
+                        if (points[index].Item2>sitesSelectionParams.Threshold*maxDistance)
                     {
                         //add point to filtered
                         filtered.Add(points[index]);
@@ -427,14 +574,14 @@ public class MarchingCubes : MonoBehaviour
 
     private float[] _gridCellsBuff;
 
-    private Mesh GenerateGeometry(Vector3 offset)
+    private Mesh GenerateGeometry(Vector3 offset, int res)
     {
        
-        float[] buffer = new float[resolution * resolution * resolution * 8 * 7];
+        float[] buffer = new float[res * res * res * 8 * 7];
 
-        triangleList = new ComputeBuffer(resolution * resolution * resolution, 5 * 6 * 3 * sizeof(float));
+        triangleList = new ComputeBuffer(res * res * res, 5 * 6 * 3 * sizeof(float));
 
-        gridCells = new ComputeBuffer(resolution * resolution * resolution, 8 * 7 * sizeof(float));
+        gridCells = new ComputeBuffer(res * res * res, 8 * 7 * sizeof(float));
 
         layersParams = new ComputeBuffer(layers.Length, 12 * sizeof(float));
 
@@ -461,13 +608,15 @@ public class MarchingCubes : MonoBehaviour
 
         computeNoise.SetInt("_Splits", split);
 
-        computeNoise.SetInt("_Resolution", resolution);
+        computeNoise.SetInt("_Resolution", res);
 
         computeNoise.SetVector("_CoordsOffset", offset);
 
         computeNoise.SetFloat("_Scale", size);
 
         computeNoise.SetFloat("_GroundLevel", groundLevel);
+
+        computeNoise.SetFloat("_GroundHeight", groundHeight);
 
         computeNoise.SetInt("_NumLayers", layers.Length);
 
@@ -479,8 +628,10 @@ public class MarchingCubes : MonoBehaviour
 
         computeNoise.SetTexture(computeNoise.FindKernel("SampleNoise"), "_FullSdf", _fullSdf);
 
+        computeNoise.SetTexture(computeNoise.FindKernel("SampleNoise"), "_GroundTexture", GroundTexture);
+
         // dispatch
-        int numThreads = (int)Mathf.Floor(resolution / 8.0f) + 1;
+        int numThreads = (int)Mathf.Floor(res / 8.0f) + 1;
 
         computeNoise.Dispatch(computeNoise.FindKernel("SampleNoise"), numThreads, numThreads, numThreads);
 
@@ -489,13 +640,13 @@ public class MarchingCubes : MonoBehaviour
         _gridCellsBuff = (float[])buffer.Clone();
 
         //POLYGONISE
-        buffer = new float[resolution * resolution * resolution * 5 * 6 * 3];
+        buffer = new float[res * res * res * 5 * 6 * 3];
         //set uniforms and buffers
         polygonise.SetFloat("_Scale", size);
 
         polygonise.SetFloat("_GroundLevel", groundLevel);
 
-        polygonise.SetInt("_Resolution", resolution);
+        polygonise.SetInt("_Resolution", res);
 
         polygonise.SetBuffer(polygonise.FindKernel("Polygonise"), "_TriangleList", triangleList);
 
@@ -517,11 +668,16 @@ public class MarchingCubes : MonoBehaviour
             coordsList.Add(new Vector3(buffer[i+6], buffer[i + 7], buffer[i + 8]));
             coordsList.Add(new Vector3(buffer[i+12], buffer[i + 13], buffer[i + 14]));
 
-            float mean = (buffer[i + 3] + buffer[i + 9] + buffer[i + 15])/3.0f;
+            Vector3 mean =
+                new Vector3(buffer[i + 3], buffer[i + 4], buffer[i + 5]) +
+                new Vector3(buffer[i + 9], buffer[i + 10], buffer[i + 11]) +
+                new Vector3(buffer[i + 15], buffer[i + 16], buffer[i + 17]);
+            mean /= 3.0f;
 
-            normsList.Add(Vector3.one*mean);
-            normsList.Add(Vector3.one * mean);
-            normsList.Add(Vector3.one * mean);
+
+            normsList.Add(mean);
+            normsList.Add(mean);
+            normsList.Add(mean);
         }
 
 
@@ -532,15 +688,15 @@ public class MarchingCubes : MonoBehaviour
             triangles[i] = i;
         }
         
-        Mesh res = new Mesh();
-        res.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        res.vertices = coordsList.ToArray();
-        res.triangles = triangles;
-        res.colors = normsList.Select(n=>new Color(n.x, n.y, n.z)).ToArray();
- 
-        res.RecalculateNormals();
+        Mesh result = new Mesh();
+        result.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        result.vertices = coordsList.ToArray();
+        result.triangles = triangles;
+        result.colors = normsList.Select(n=>new Color(n.x, n.y, n.z)).ToArray();
 
-        return res;
+        result.RecalculateNormals();
+
+        return result;
     
     }
 

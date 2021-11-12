@@ -20,6 +20,11 @@ int _NumLayers;
 float3 _CoordsOffset;
 float _GroundLevel;
 
+//Ground
+float _GroundHeight;
+Texture2D<float4> _GroundTexture;
+
+
 RWStructuredBuffer<GRIDCELL> _Cells;
 StructuredBuffer<NOISE_LAYER_PARAMS> _NoiseParams;
 
@@ -185,8 +190,17 @@ float4 GetValue(uint x, uint y, uint z)
     }
 
     float aa = float(cnt) / 26;
-
-    return float4(value, aa,aa,aa);
+    uint
+        w, h;
+    _GroundTexture.GetDimensions( w,  h);
+    float groundTexValue = _GroundTexture.SampleLevel(SDFLinearClampSampler, float2(float(x)/(_Resolution), float(z)/ (_Resolution)), 0).r;
+    float groundValue =
+        (_GroundLevel - (coords.y - 2.0f*(_Scale/_Resolution) - 0.0001f)) +
+        (groundTexValue * _GroundHeight);
+   if(value>groundValue)
+       return float4(value, aa, aa, 0.0f);
+   else
+    return float4(groundValue, 1.0f-groundTexValue, 1.0f-groundTexValue,1.0f); 
 }
 
 [numthreads(8, 8, 8)]

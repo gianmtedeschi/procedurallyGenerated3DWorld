@@ -1,0 +1,212 @@
+#define GROUP_SIZE 256
+#define MAX_DIM_GROUPS 1024
+#define MAX_DIM_THREADS (GROUP_SIZE * MAX_DIM_GROUPS)
+#pragma kernel Hash
+#pragma kernel FindMinMax
+#pragma kernel CleanMinMax;
+#pragma kernel ComputeDirections;
+#pragma kernel Step;
+
+uint count;
+float radius;
+uint resolution;
+
+// simulation data 
+float deltaTime;
+float speed;
+float alignment;
+float cohesion;
+float avoidance;
+float obstacleAvoidance;
+
+RWStructuredBuffer<int> _Hashes;
+RWStructuredBuffer<int2> _KeysMinMax;
+RWStructuredBuffer<float3> _Positions;
+RWStructuredBuffer<float3> _Directions;
+RWStructuredBuffer<float3> _PrevDirections;
+RWStructuredBuffer<float3> _NewDirections;
+StructuredBuffer<int> _Keys;
+
+// collisions
+int sdfResolution;
+float domainSize;
+Texture3D<float4> _Sdf;
+SamplerState _SdfLinearClampSampler;
+
+float CubicKernel(float x, float h)
+{
+	x = min(max(x, 0), h);
+
+	return pow(1 - (x / h), 3);
+}
+
+int HashInt(int3 coords, int resolution)
+{
+	return
+		coords.x + (coords.y * resolution) + (coords.z * resolution * resolution);
+}
+
+int HashWorld(float3 coords, int resolution, float radius)
+{
+	int3 integerCoords = int3(
+		int(coords.x / radius),
+		int(coords.y / radius),
+		int(coords.z / radius));
+
+	return HashInt(integerCoords, resolution);
+}
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void Hash(uint3 id : SV_DispatchThreadID) {
+
+	uint i = id.x + id.y * MAX_DIM_THREADS;
+
+	if (i > count-1)
+		return;
+
+	float3 coords = _Positions[i];
+
+	_Hashes[i] = HashWorld(coords, resolution, radius);
+}
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void FindMinMax(uint3 id : SV_DispatchThreadID) {
+
+	uint i = id.x + id.y * MAX_DIM_THREADS;
+
+	if (i > count-1)
+		return;
+
+
+	if ((i + 1 > count - 1) || (_Hashes[_Keys[i]] != _Hashes[_Keys[i + 1]]))
+	{
+		//consider i as max delimiter
+		_KeysMinMax[_Hashes[_Keys[i]]].y = i;
+	}
+
+	if ((i - 1 < 0) || (_Hashes[_Keys[i]] != _Hashes[_Keys[i - 1]]))
+	{
+		//consider i as min delimiter
+		_KeysMinMax[_Hashes[_Keys[i]]].x = i;
+	}
+
+}
+[numthreads(8, 8, 8)]
+void CleanMinMax(uint3 id : SV_DispatchThreadID) {
+
+	if (id.x > resolution - 1 ||
+		id.y > resolution - 1 ||
+		id.z > resolution - 1)
+		return;
+
+	_KeysMinMax[id.x + (id.y * resolution) + (id.z * resolution * resolution)] = int2(-1, -1);
+}
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void ComputeDirections(uint3 id : SV_DispatchThreadID) {
+
+	uint i = id.x + id.y * MAX_DIM_THREADS;
+
+	if (i > count - 1)
+		return;
+
+	int key = _Keys[i];
+	float3 position = _Positions[key];
+	float3 direction = _Directions[key];
+
+	[unroll]
+	for (int i = -1; i <= 1; i++)
+	{
+		[unroll]
+		for(int j = -1; j <= 1; j++)
+		{
+			[unroll]
+			for(int k = -1; k <= 1; k++)
+			{
+				// probably there are way better ways to do this check...
+				int x = (_Hashes[key]) % resolution;
+				int y = int((_Hashes[key] / float(resolution))) % resolution;
+				int z = int(_Hashes[key] / (resolution * resolution));
+
+				//check if the there's actually a neighbouring cell or it's just outside the grid 
+				//(beeing a flattened 3d array the check is not straightforward)
+				if ((x + i) < 0 || (x + i) > resolution - 1 ||
+					(y + j) < 0 || (y + j) > resolution - 1 ||
+					(z + k) < 0 || (z + k) > resolution - 1 )
+					continue;
+
+				int neighbourCellIndex = _Hashes[key] + i + (j * resolution) + (k * resolution * resolution);
+				int low = _KeysMinMax[neighbourCellIndex].x;
+				int high = _KeysMinMax[neighbourCellIndex].y;
+
+				if (low == -1)
+					continue;
+
+				[loop] //loop? unroll with max iterations? what makes more sense?
+				for (int index = low; index <= high; index++)
+				{
+					// skipping self evaluation
+					if (_Keys[index] == key)
+						continue;
+
+					float3 neighbourPosition = _Positions[_Keys[index]];
+					float3 neighbourDirection = _Directions[_Keys[index]];
+					float3 joiningVector = neighbourPosition - position;
+					float3 normalizedJoiningVector = normalize(joiningVector);
+					float distance = length(joiningVector);
+
+					if (distance > radius)
+						continue;
+
+					if (dot(direction, normalizedJoiningVector) < 0) // cone of sight
+						continue;
+
+					//ALIGNMENT
+					direction += alignment * neighbourDirection;
+
+					//COHESION                     
+					direction += cohesion * joiningVector;                                                          
+
+					//AVOIDANCE
+					direction += avoidance * CubicKernel(distance, radius) * normalizedJoiningVector *-1.0f; 
+					// using a cubic kernel...is it the right choice?
+				}
+			}
+		}
+	}
+
+	direction = normalize(direction);
+
+	//OBSTACLE AVOIDANCE
+	float3 sdfIndex = float3(
+		(position.x / domainSize),
+		(position.y / domainSize),
+		(position.z / domainSize)
+		);
+
+	float4 sdfVal = _Sdf.SampleLevel(_SdfLinearClampSampler, sdfIndex, 0);
+	float obstacleDistance = sdfVal.a * domainSize;
+	float3 obstacleDirection = normalize(sdfVal.rgb);
+
+	direction += obstacleAvoidance * CubicKernel(obstacleDistance, radius*2.0f) * -1.0f * obstacleDirection;
+	// same cubic kernel with a different parameter;
+
+	_NewDirections[key] = normalize(direction);
+}
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void Step(uint3 id : SV_DispatchThreadID) {
+	uint i = id.x + id.y * MAX_DIM_THREADS;
+
+	if (i > count - 1)
+		return;
+	//drawing purpose only
+	_PrevDirections[i] = _Directions[i];
+
+	_Directions[i] = _NewDirections[i];
+
+
+	_Positions[i] += _Directions[i] * speed * deltaTime;
+
+	
+}
