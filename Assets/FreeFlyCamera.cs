@@ -194,11 +194,6 @@ public class FreeFlyCamera : MonoBehaviour
             transform.position = _initPosition;
             transform.eulerAngles = _initRotation;
         }
-    }
-
-
-    private void FixedUpdate()
-    {
         CalculateCurrentIncrease(deltaPosition != Vector3.zero);
 
         //transform.position += deltaPosition * currentSpeed * _currentIncrease;
@@ -224,5 +219,35 @@ public class FreeFlyCamera : MonoBehaviour
                 r.rotation.eulerAngles.z)
             );
         }
+    }
+
+
+    private void FixedUpdate()
+    {
+        /*CalculateCurrentIncrease(deltaPosition != Vector3.zero);
+
+        //transform.position += deltaPosition * currentSpeed * _currentIncrease;
+        //Vector3 tempVect = new Vector3(0, 0, 1);
+        //tempVect = tempVect.normalized + deltaPosition * currentSpeed * _currentIncrease;
+
+        r.MovePosition(transform.position + (deltaPosition * currentSpeed * _currentIncrease));
+
+
+        // Rotation
+        if (_enableRotation)
+        {
+            // Pitch
+            r.MoveRotation(r.rotation * Quaternion.AngleAxis(
+                -Input.GetAxis("Mouse Y") * _mouseSense,
+                Vector3.right)
+            );
+
+            // Paw
+            r.MoveRotation(Quaternion.Euler(
+                r.rotation.eulerAngles.x,
+                r.rotation.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
+                r.rotation.eulerAngles.z)
+            );
+        }*/
     }
 }
