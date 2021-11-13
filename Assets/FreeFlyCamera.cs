@@ -213,6 +213,7 @@ public class FreeFlyCamera : MonoBehaviour
             );
 
             // Paw
+
             r.MoveRotation(Quaternion.Euler(
                 r.rotation.eulerAngles.x,
                 r.rotation.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
