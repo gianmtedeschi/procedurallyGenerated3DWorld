@@ -5,7 +5,7 @@
 
 using UnityEngine;
 
-[RequireComponent(typeof(Camera))]
+//[RequireComponent(typeof(Camera))]
 public class FreeFlyCamera : MonoBehaviour
 {
     #region UI
@@ -88,6 +88,9 @@ public class FreeFlyCamera : MonoBehaviour
     private Vector3 _initPosition;
     private Vector3 _initRotation;
 
+    Rigidbody r;
+
+
 #if UNITY_EDITOR
     private void OnValidate()
     {
@@ -101,6 +104,11 @@ public class FreeFlyCamera : MonoBehaviour
     {
         _initPosition = transform.position;
         _initRotation = transform.eulerAngles;
+        
+        r = GetComponent<Rigidbody>();
+        r.useGravity = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     private void OnEnable()
@@ -130,7 +138,7 @@ public class FreeFlyCamera : MonoBehaviour
 
     private void CalculateCurrentIncrease(bool moving)
     {
-        _currentIncrease = Time.deltaTime;
+        _currentIncrease = Time.fixedDeltaTime;
 
         if (!_enableSpeedAcceleration || _enableSpeedAcceleration && !moving)
         {
@@ -138,31 +146,23 @@ public class FreeFlyCamera : MonoBehaviour
             return;
         }
 
-        _currentIncreaseMem += Time.deltaTime * (_speedAccelerationFactor - 1);
-        _currentIncrease = Time.deltaTime + Mathf.Pow(_currentIncreaseMem, 3) * Time.deltaTime;
+        _currentIncreaseMem += Time.fixedDeltaTime * (_speedAccelerationFactor - 1);
+        _currentIncrease = Time.fixedDeltaTime + Mathf.Pow(_currentIncreaseMem, 3) * Time.fixedDeltaTime;
     }
+
+    Vector3 deltaPosition;
+    float currentSpeed;
 
     private void Update()
     {
         if (!_active)
             return;
 
-        SetCursorState();
-
-        if (Cursor.visible)
-            return;
-
-        // Translation
-        if (_enableTranslation)
-        {
-            transform.Translate(Vector3.forward * Input.mouseScrollDelta.y * Time.deltaTime * _translationSpeed);
-        }
-
         // Movement
         if (_enableMovement)
         {
-            Vector3 deltaPosition = Vector3.zero;
-            float currentSpeed = _movementSpeed;
+            currentSpeed = _movementSpeed;
+            deltaPosition = Vector3.zero;
 
             if (Input.GetKey(_boostSpeed))
                 currentSpeed = _boostedSpeed;
@@ -180,39 +180,49 @@ public class FreeFlyCamera : MonoBehaviour
                 deltaPosition += transform.right;
 
             if (Input.GetKey(_moveUp))
-                //deltaPosition += transform.up;
+                deltaPosition += transform.up;
 
             if (Input.GetKey(_moveDown))
                 deltaPosition -= transform.up;
 
-            // Calc acceleration
-            CalculateCurrentIncrease(deltaPosition != Vector3.zero);
-
-            transform.position += deltaPosition * currentSpeed * _currentIncrease;
         }
 
-        // Rotation
-        if (_enableRotation)
-        {
-            // Pitch
-            transform.rotation *= Quaternion.AngleAxis(
-                -Input.GetAxis("Mouse Y") * _mouseSense,
-                Vector3.right
-            );
-
-            // Paw
-            transform.rotation = Quaternion.Euler(
-                transform.eulerAngles.x,
-                transform.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
-                transform.eulerAngles.z
-            );
-        }
 
         // Return to init position
         if (Input.GetKeyDown(_initPositonButton))
         {
             transform.position = _initPosition;
             transform.eulerAngles = _initRotation;
+        }
+    }
+
+
+    private void FixedUpdate()
+    {
+        CalculateCurrentIncrease(deltaPosition != Vector3.zero);
+
+        //transform.position += deltaPosition * currentSpeed * _currentIncrease;
+        //Vector3 tempVect = new Vector3(0, 0, 1);
+        //tempVect = tempVect.normalized + deltaPosition * currentSpeed * _currentIncrease;
+
+        r.MovePosition(transform.position + (deltaPosition * currentSpeed * _currentIncrease));
+
+
+        // Rotation
+        if (_enableRotation)
+        {
+            // Pitch
+            r.MoveRotation(r.rotation * Quaternion.AngleAxis(
+                -Input.GetAxis("Mouse Y") * _mouseSense,
+                Vector3.right)
+            );
+
+            // Paw
+            r.MoveRotation(Quaternion.Euler(
+                r.rotation.eulerAngles.x,
+                r.rotation.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
+                r.rotation.eulerAngles.z)
+            );
         }
     }
 }
