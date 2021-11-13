@@ -19,6 +19,10 @@ float cohesion;
 float avoidance;
 float obstacleAvoidance;
 
+// player avoidance
+float3 playerPosition;
+float playerRadius;
+
 RWStructuredBuffer<int> _Hashes;
 RWStructuredBuffer<int2> _KeysMinMax;
 RWStructuredBuffer<float3> _Positions;
@@ -187,9 +191,16 @@ void ComputeDirections(uint3 id : SV_DispatchThreadID) {
 	float4 sdfVal = _Sdf.SampleLevel(_SdfLinearClampSampler, sdfIndex, 0);
 	float obstacleDistance = sdfVal.a * domainSize;
 	float3 obstacleDirection = normalize(sdfVal.rgb);
+	float3 playerDirection = float3(playerPosition - position);
+	float playerDistance = length(playerDirection);
 
-	direction += obstacleAvoidance * CubicKernel(obstacleDistance, radius*2.0f) * -1.0f * obstacleDirection;
+	if(playerDistance > obstacleDistance)
+		direction += obstacleAvoidance * CubicKernel(obstacleDistance, radius*2.0f) * -1.0f * obstacleDirection;
+	else
+		direction += obstacleAvoidance * CubicKernel(playerDistance, playerRadius * 2.0f) * -1.0f * playerDirection;
 	// same cubic kernel with a different parameter;
+
+
 
 	_NewDirections[key] = normalize(direction);
 }

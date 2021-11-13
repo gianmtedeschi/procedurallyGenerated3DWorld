@@ -539,7 +539,7 @@ MonoBehaviour:
   powOfTwo: 13
   radius: 1
   cohesion: 0.0246
-  alignment: 0.0334
+  alignment: 0.0342
   avoidance: 0.5
   obstacleAvoidance: 1
   speed: 3.49
@@ -550,6 +550,8 @@ MonoBehaviour:
   showGrid: 0
   showDirection: 0
   _boidsCompute: {fileID: 7200000, guid: c2eb1982e41c48f46a14fd73b529a5fa, type: 3}
+  playerTransform: {fileID: 1256552275}
+  playerRadius: 2
   _sdf: {fileID: 11700000, guid: 93b2bfc9524faca4fa0a32cbdeb67c39, type: 2}
 --- !u!4 &510863210
 Transform:
@@ -1447,13 +1449,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cc26bf2937f87614da3464b3f3e14e0b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  normalSpeed: 5
-  accelerationSpeed: 10
+  normalSpeed: 4
+  accelerationSpeed: 8
   cameraPosition: {fileID: 416354593}
   mainCamera: {fileID: 955747609}
   spaceshipRoot: {fileID: 298877198}
-  rotationSpeed: 2
-  cameraSmooth: 4
+  rotationSpeed: 3
+  cameraSmooth: 5
 --- !u!54 &1256552272
 Rigidbody:
   m_ObjectHideFlags: 0

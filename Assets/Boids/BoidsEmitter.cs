@@ -73,7 +73,9 @@ public class BoidsEmitter : MonoBehaviour
 
     // collision sdf
     [SerializeField]
-    private Texture3D _sdf;
+    public Transform playerTransform;
+    public float playerRadius=1.0f;
+    public Texture3D _sdf;
 
     // constants
     private const string PROP_COUNT = "count";
@@ -88,6 +90,8 @@ public class BoidsEmitter : MonoBehaviour
     private const string PROP_SDFRESOLUTION = "sdfResolution";
     private const string PROP_DOMAINSIZE = "domainSize";
     private const string PROP_SCALE = "_Scale";
+    private const string PROP_PLAYERPOSITION = "playerPosition";
+    private const string PROP_PLAYERRADIUS = "playerRadius";
 
     private const string BUFF_HASHES = "_Hashes";
     private const string BUFF_POSITIONS = "_Positions";
@@ -265,6 +269,10 @@ public class BoidsEmitter : MonoBehaviour
 
         _boidsCompute.SetInt(PROP_SDFRESOLUTION, _sdf.width);
 
+        _boidsCompute.SetFloat(PROP_PLAYERRADIUS, playerRadius);
+
+        _boidsCompute.SetVector(PROP_PLAYERPOSITION, playerTransform.position);
+
         _boidsCompute.SetBuffer(_boidsCompute.FindKernel(KERNEL_STEP), BUFF_POSITIONS, _boidsPositions_buffer);
 
         _boidsCompute.SetBuffer(_boidsCompute.FindKernel(KERNEL_STEP), BUFF_DIRECTIONS, _boidsDirections_buffer);
@@ -282,7 +290,7 @@ public class BoidsEmitter : MonoBehaviour
     }
 
     // Update is called once per frame
-    void Update()
+    private void FixedUpdate()
     {
        
 
@@ -299,18 +307,9 @@ public class BoidsEmitter : MonoBehaviour
         ComputeDirections(_numBoids);
 
         // Advance one step in the simulation
-        Step(_numBoids, Time.deltaTime);
+        Step(_numBoids, Time.fixedDeltaTime);
 
-        // procedural drawing
-
-        material.SetBuffer(BUFF_POSITIONS, _boidsPositions_buffer);
-        material.SetBuffer(BUFF_DIRECTIONS, _boidsDirections_buffer);
-        material.SetBuffer(BUFF_PREVDIRECTIONS, _boidsPrevDirections_buffer);
-        material.SetFloat(PROP_SCALE, size);
-        var bounds = new Bounds(Vector3.one * domainSize/2.0f, Vector3.one * domainSize);
-        Graphics.DrawMeshInstancedProcedural(
-            mesh, 0, material, bounds, _boidsPositions_buffer.count
-        );
+       
 
 
 #if DEBUG_BOIDS
@@ -321,6 +320,20 @@ public class BoidsEmitter : MonoBehaviour
         _keys_minMax_buffer.GetData(_keys_minMax);
 #endif
 
+    }
+
+    private void Update()
+    {
+        // procedural drawing
+
+        material.SetBuffer(BUFF_POSITIONS, _boidsPositions_buffer);
+        material.SetBuffer(BUFF_DIRECTIONS, _boidsDirections_buffer);
+        material.SetBuffer(BUFF_PREVDIRECTIONS, _boidsPrevDirections_buffer);
+        material.SetFloat(PROP_SCALE, size);
+        var bounds = new Bounds(Vector3.one * domainSize / 2.0f, Vector3.one * domainSize);
+        Graphics.DrawMeshInstancedProcedural(
+            mesh, 0, material, bounds, _boidsPositions_buffer.count
+        );
     }
 
     private Color[] colors = new Color[] { Color.blue, Color.red, Color.cyan, Color.green, Color.grey, Color.magenta, Color.yellow };
