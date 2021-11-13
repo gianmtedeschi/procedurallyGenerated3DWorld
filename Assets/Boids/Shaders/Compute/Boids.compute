@@ -44,6 +44,13 @@ float CubicKernel(float x, float h)
 	return pow(1 - (x / h), 3);
 }
 
+float LinearKernel(float x, float h)
+{
+	x = min(max(x, 0), h);
+
+	return 1 - (x / h);
+}
+
 int HashInt(int3 coords, int resolution)
 {
 	return
@@ -172,7 +179,7 @@ void ComputeDirections(uint3 id : SV_DispatchThreadID) {
 					direction += cohesion * joiningVector;                                                          
 
 					//AVOIDANCE
-					direction += avoidance * CubicKernel(distance, radius) * normalizedJoiningVector *-1.0f; 
+					direction += avoidance * LinearKernel(distance, radius) * normalizedJoiningVector *-1.0f; 
 					// using a cubic kernel...is it the right choice?
 				}
 			}
