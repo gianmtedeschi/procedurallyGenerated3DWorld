@@ -7,7 +7,7 @@
 #pragma kernel SampleNoise
 
 //SDF
-SamplerState SDFLinearClampSampler; // boia https://docs.unity3d.com/Manual/SL-SamplerStates.html
+SamplerState SDFLinearClampSampler; // https://docs.unity3d.com/Manual/SL-SamplerStates.html
 Texture3D<float4> _SDF;
 RWTexture3D<float4> _FullSdf;
 

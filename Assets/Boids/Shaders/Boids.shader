@@ -88,7 +88,7 @@ Shader "Custom/Boids" {
 						0.0, 0.0, 0.0, 1.0
 					};
 
-					unity_ObjectToWorld =  mul(mul(trasl4, scale4), rot4);/** scale4 * trasl4*/  /*rot4 **/;
+					unity_ObjectToWorld =  mul(mul(trasl4, scale4), rot4);
 
 				#endif
 			}

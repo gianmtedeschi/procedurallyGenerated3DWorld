@@ -134,7 +134,7 @@ GameObject:
   m_Component:
   - component: {fileID: 55208840}
   - component: {fileID: 55208839}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -178,7 +178,7 @@ GameObject:
   m_Component:
   - component: {fileID: 159531718}
   - component: {fileID: 159531719}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Cube (3)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -271,7 +271,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 273522056}
-  m_LocalRotation: {x: 0.11897699, y: 0.6970254, z: -0.118976966, w: 0.69702554}
+  m_LocalRotation: {x: 0.118976995, y: 0.6970254, z: -0.118976966, w: 0.69702554}
   m_LocalPosition: {x: 10.67001, y: 19.55, z: 25.03}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
@@ -339,7 +339,7 @@ GameObject:
   - component: {fileID: 312509436}
   - component: {fileID: 312509435}
   - component: {fileID: 312509434}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (6)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -644,7 +644,7 @@ LensFlare:
   m_FadeSpeed: 3
   m_IgnoreLayers:
     serializedVersion: 2
-    m_Bits: 1024
+    m_Bits: 2560
   m_Directional: 1
 --- !u!4 &509308068
 Transform:
@@ -734,7 +734,7 @@ GameObject:
   - component: {fileID: 534396306}
   - component: {fileID: 534396305}
   - component: {fileID: 534396304}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (4)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -830,7 +830,7 @@ GameObject:
   - component: {fileID: 603743700}
   - component: {fileID: 603743699}
   - component: {fileID: 603743698}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (5)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -924,7 +924,7 @@ GameObject:
   m_Component:
   - component: {fileID: 679910314}
   - component: {fileID: 679910315}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Cube (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1066,7 +1066,7 @@ GameObject:
   - component: {fileID: 918188085}
   - component: {fileID: 918188084}
   - component: {fileID: 918188083}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (3)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1163,7 +1163,7 @@ GameObject:
   - component: {fileID: 921610579}
   - component: {fileID: 921610583}
   - component: {fileID: 921610582}
-  m_Layer: 10
+  m_Layer: 11
   m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1362,7 +1362,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 955747607}
-  m_LocalRotation: {x: 0.11897699, y: 0.6970254, z: -0.118976966, w: 0.69702554}
+  m_LocalRotation: {x: 0.118976995, y: 0.6970254, z: -0.118976966, w: 0.69702554}
   m_LocalPosition: {x: 10.67001, y: 19.55, z: 25.03}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
@@ -1483,7 +1483,7 @@ GameObject:
   - component: {fileID: 1042976978}
   - component: {fileID: 1042976977}
   - component: {fileID: 1042976976}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1579,7 +1579,7 @@ GameObject:
   - component: {fileID: 1121467344}
   - component: {fileID: 1121467343}
   - component: {fileID: 1121467342}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (7)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1675,7 +1675,7 @@ GameObject:
   - component: {fileID: 1160275220}
   - component: {fileID: 1160275219}
   - component: {fileID: 1160275218}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (8)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1843,7 +1843,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1599916334}
   - component: {fileID: 1599916335}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Cube (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1887,7 +1887,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1726907199}
   - component: {fileID: 1726907200}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Cube (4)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1930,7 +1930,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1728582322}
-  m_Layer: 10
+  m_Layer: 9
   m_Name: Boundaries
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1968,7 +1968,7 @@ GameObject:
   - component: {fileID: 1873179153}
   - component: {fileID: 1873179152}
   - component: {fileID: 1873179151}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Quad (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2156,7 +2156,7 @@ GameObject:
   - component: {fileID: 2092210612}
   - component: {fileID: 2092210615}
   - component: {fileID: 2092210614}
-  m_Layer: 10
+  m_Layer: 11
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2239,7 +2239,7 @@ GameObject:
   - component: {fileID: 2129225938}
   - component: {fileID: 2129225937}
   - component: {fileID: 2129225936}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Rocks
   m_TagString: Untagged
   m_Icon: {fileID: 0}
