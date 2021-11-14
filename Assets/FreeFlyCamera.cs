@@ -4,6 +4,7 @@
 //===========================================================================//
 
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 //[RequireComponent(typeof(Camera))]
 public class FreeFlyCamera : MonoBehaviour
@@ -194,14 +195,6 @@ public class FreeFlyCamera : MonoBehaviour
             transform.position = _initPosition;
             transform.eulerAngles = _initRotation;
         }
-        CalculateCurrentIncrease(deltaPosition != Vector3.zero);
-
-        //transform.position += deltaPosition * currentSpeed * _currentIncrease;
-        //Vector3 tempVect = new Vector3(0, 0, 1);
-        //tempVect = tempVect.normalized + deltaPosition * currentSpeed * _currentIncrease;
-
-        r.MovePosition(transform.position + (deltaPosition * currentSpeed * _currentIncrease));
-
 
         // Rotation
         if (_enableRotation)
@@ -220,35 +213,19 @@ public class FreeFlyCamera : MonoBehaviour
                 r.rotation.eulerAngles.z)
             );
         }
+
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            SceneManager.LoadScene("MainMenu");
+        }
     }
 
 
     private void FixedUpdate()
     {
-        /*CalculateCurrentIncrease(deltaPosition != Vector3.zero);
-
-        //transform.position += deltaPosition * currentSpeed * _currentIncrease;
-        //Vector3 tempVect = new Vector3(0, 0, 1);
-        //tempVect = tempVect.normalized + deltaPosition * currentSpeed * _currentIncrease;
+        CalculateCurrentIncrease(deltaPosition != Vector3.zero);
 
         r.MovePosition(transform.position + (deltaPosition * currentSpeed * _currentIncrease));
 
-
-        // Rotation
-        if (_enableRotation)
-        {
-            // Pitch
-            r.MoveRotation(r.rotation * Quaternion.AngleAxis(
-                -Input.GetAxis("Mouse Y") * _mouseSense,
-                Vector3.right)
-            );
-
-            // Paw
-            r.MoveRotation(Quaternion.Euler(
-                r.rotation.eulerAngles.x,
-                r.rotation.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
-                r.rotation.eulerAngles.z)
-            );
-        }*/
     }
 }

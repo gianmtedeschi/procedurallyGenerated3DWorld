@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 1896362212}
-  m_IndirectSpecularColor: {r: 0.71522975, g: 0.60181713, b: 0.4672022, a: 1}
+  m_IndirectSpecularColor: {r: 0.71522814, g: 0.60181594, b: 0.46720105, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -97,7 +97,8 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 0}
+  m_LightingDataAsset: {fileID: 112000000, guid: 3d2b4201fc3cb1345929fa3ffc9eb002,
+    type: 2}
   m_LightingSettings: {fileID: 0}
 --- !u!196 &4
 NavMeshSettings:
@@ -1188,7 +1189,7 @@ MonoBehaviour:
   _translationSpeed: 55
   _enableMovement: 1
   _movementSpeed: 5
-  _boostedSpeed: 15
+  _boostedSpeed: 10
   _boostSpeed: 304
   _moveUp: 101
   _moveDown: 113
@@ -1264,8 +1265,8 @@ SphereCollider:
   m_IsTrigger: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 1.59
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 1.68
+  m_Center: {x: 0, y: 0.28, z: -0.24}
 --- !u!54 &921610583
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1279,9 +1280,9 @@ Rigidbody:
   m_AngularDrag: 0.05
   m_UseGravity: 0
   m_IsKinematic: 0
-  m_Interpolate: 0
+  m_Interpolate: 1
   m_Constraints: 112
-  m_CollisionDetection: 0
+  m_CollisionDetection: 2
 --- !u!1 &955747607
 GameObject:
   m_ObjectHideFlags: 0
