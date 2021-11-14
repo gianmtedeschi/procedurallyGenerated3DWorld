@@ -1,7 +1,8 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using System.Collections;
+using UnityEditor;
 
-[RequireComponent(typeof(MeshFilter))]
 public class ConeGenerator : MonoBehaviour
 {
 
@@ -9,25 +10,14 @@ public class ConeGenerator : MonoBehaviour
 	public float radius = 1f;
 	public float height = 2f;
 
-	void Start()
-	{
-		GetComponent<MeshFilter>().sharedMesh = Create(subdivisions, radius, height);
-	}
-
-	void Update()
-	{
-	}
-
-	Mesh Create(int subdivisions, float radius, float height)
+	 public void Create()
 	{
 		Mesh mesh = new Mesh();
 
-		Vector3[] vertices = new Vector3[subdivisions + 2];
-		Vector2[] uv = new Vector2[vertices.Length];
+		Vector3[] vertices = new Vector3[(subdivisions + 1) * 2 + 1];
 		int[] triangles = new int[(subdivisions * 2) * 3];
 
 		vertices[0] = Vector3.zero;
-		uv[0] = new Vector2(0.5f, 0f);
 		for (int i = 0, n = subdivisions - 1; i < subdivisions; i++)
 		{
 			float ratio = (float)i / n;
@@ -37,19 +27,28 @@ public class ConeGenerator : MonoBehaviour
 			vertices[i + 1] = new Vector3(x, 0f, z);
 
 			Debug.Log(ratio);
-			uv[i + 1] = new Vector2(ratio, 0f);
 		}
 		vertices[subdivisions + 1] = new Vector3(0f, height, 0f);
-		uv[subdivisions + 1] = new Vector2(0.5f, 1f);
+
+		// duplicate base for normals
+
+		for (int i = 0, n = subdivisions - 1; i < subdivisions; i++)
+		{
+			float ratio = (float)i / n;
+			float r = ratio * (Mathf.PI * 2f);
+			float x = Mathf.Cos(r) * radius;
+			float z = Mathf.Sin(r) * radius;
+			vertices[i + 1 + (subdivisions + 1)] = new Vector3(x, 0f, z);
+		}
 
 		// construct bottom
 
 		for (int i = 0, n = subdivisions - 1; i < n; i++)
 		{
 			int offset = i * 3;
-			triangles[offset] = 0;
-			triangles[offset + 1] = i + 1;
-			triangles[offset + 2] = i + 2;
+			triangles[offset] = 0 + (subdivisions + 2);
+			triangles[offset + 1] = i + 1 + (subdivisions + 2);
+			triangles[offset + 2] = i + 2 + (subdivisions + 2);
 		}
 
 		// construct sides
@@ -64,12 +63,50 @@ public class ConeGenerator : MonoBehaviour
 		}
 
 		mesh.vertices = vertices;
-		mesh.uv = uv;
 		mesh.triangles = triangles;
 		mesh.RecalculateBounds();
 		mesh.RecalculateNormals();
 
-		return mesh;
+		SaveAssets(mesh);
 	}
 
+    string folderName = "Procedural_Boids";
+
+    private void SaveAssets(Mesh coneMesh)
+    {
+        string parentFolder = @"Assets";
+        string assetsFolder = $@"{parentFolder}\{folderName}";
+        string guid;
+
+        if (!AssetDatabase.IsValidFolder(assetsFolder))
+            guid = AssetDatabase.CreateFolder(parentFolder, folderName);
+        else
+            guid = AssetDatabase.AssetPathToGUID(assetsFolder);
+
+        #region Meshes
+        if (coneMesh != null)
+        {
+
+
+            string path = $@"{parentFolder}\{folderName}\coneMesh.asset";
+
+            if (AssetDatabase.LoadAssetAtPath(path, typeof(Mesh)) != null)
+            {
+                // probably it's not the way it's meant to be done....but time's up
+                AssetDatabase.DeleteAsset(path);
+
+            }
+
+            AssetDatabase.CreateAsset(coneMesh, path);
+
+
+        }
+        #endregion
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+    }
+
+
 }
+#endif
