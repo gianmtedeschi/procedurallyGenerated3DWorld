@@ -1,88 +1,209 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 
-[RequireComponent(typeof(Rigidbody))]
-
-public class SC_SpaceshipController : MonoBehaviour
+public class Controller : MonoBehaviour
 {
-    public float normalSpeed = 25f;
-    public float accelerationSpeed = 45f;
-    public Transform cameraPosition;
-    public Camera mainCamera;
-    public Transform spaceshipRoot;
-    public float rotationSpeed = 2.0f;
-    public float cameraSmooth = 4f;
-    public RectTransform crosshairTexture;
+    #region UI
 
-    float speed;
+    [Space]
+
+    [SerializeField]
+    [Tooltip("The script is currently active")]
+    private bool _active = true;
+
+    [Space]
+
+    [SerializeField]
+    [Tooltip("Camera rotation by mouse movement is active")]
+    private bool _enableRotation = true;
+
+    [SerializeField]
+    [Tooltip("Sensitivity of mouse rotation")]
+    private float _mouseSense = 1.8f;
+
+    [Space]
+
+    [SerializeField]
+    [Tooltip("Camera zooming in/out by 'Mouse Scroll Wheel' is active")]
+    private bool _enableTranslation = true;
+
+    [SerializeField]
+    [Tooltip("Velocity of camera zooming in/out")]
+    private float _translationSpeed = 55f;
+
+    [Space]
+
+    [SerializeField]
+    [Tooltip("Camera movement by 'W','A','S','D','Q','E' keys is active")]
+    private bool _enableMovement = true;
+
+    [SerializeField]
+    [Tooltip("Camera movement speed")]
+    private float _movementSpeed = 10f;
+
+    [SerializeField]
+    [Tooltip("Speed of the quick camera movement when holding the 'Left Shift' key")]
+    private float _boostedSpeed = 50f;
+
+    [SerializeField]
+    [Tooltip("Boost speed")]
+    private KeyCode _boostSpeed = KeyCode.LeftShift;
+
+    [SerializeField]
+    [Tooltip("Move up")]
+    private KeyCode _moveUp = KeyCode.E;
+
+    [SerializeField]
+    [Tooltip("Move down")]
+    private KeyCode _moveDown = KeyCode.Q;
+
+    [Space]
+
+    [SerializeField]
+    [Tooltip("Acceleration at camera movement is active")]
+    private bool _enableSpeedAcceleration = true;
+
+    [SerializeField]
+    [Tooltip("Rate which is applied during camera movement")]
+    private float _speedAccelerationFactor = 1.5f;
+
+    [Space]
+
+    [SerializeField]
+    [Tooltip("This keypress will move the camera to initialization position")]
+    private KeyCode _initPositonButton = KeyCode.R;
+
+    #endregion UI
+
+    private CursorLockMode _wantedMode;
+
+    private float _currentIncrease = 1;
+    private float _currentIncreaseMem = 0;
+
+    private Vector3 _initPosition;
+    private Vector3 _initRotation;
+
     Rigidbody r;
-    Quaternion lookRotation;
-    float rotationZ = 0;
-    float mouseXSmooth = 0;
-    float mouseYSmooth = 0;
-    Vector3 defaultShipRotation;
 
-    // Start is called before the first frame update
-    void Start()
+
+#if UNITY_EDITOR
+    private void OnValidate()
     {
+        if (_boostedSpeed < _movementSpeed)
+            _boostedSpeed = _movementSpeed;
+    }
+#endif
+
+
+    private void Start()
+    {
+        _initPosition = transform.position;
+        _initRotation = transform.eulerAngles;
+        
         r = GetComponent<Rigidbody>();
         r.useGravity = false;
-        lookRotation = transform.rotation;
-        defaultShipRotation = spaceshipRoot.localEulerAngles;
-        rotationZ = defaultShipRotation.z;
-
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
-    void FixedUpdate()
+    private void OnEnable()
     {
-        //Press Right Mouse Button to accelerate
-        if (Input.GetMouseButton(1))
+        if (_active)
+            _wantedMode = CursorLockMode.Locked;
+    }
+
+
+    private void CalculateCurrentIncrease(bool moving)
+    {
+        _currentIncrease = Time.fixedDeltaTime;
+
+        if (!_enableSpeedAcceleration || _enableSpeedAcceleration && !moving)
         {
-            speed = Mathf.Lerp(speed, accelerationSpeed, Time.deltaTime * 3);
-        }
-        else
-        {
-            speed = Mathf.Lerp(speed, normalSpeed, Time.deltaTime * 10);
+            _currentIncreaseMem = 0;
+            return;
         }
 
-        //Set moveDirection to the vertical axis (up and down keys) * speed
-        Vector3 moveDirection = new Vector3(0, 0, speed);
-        //Transform the vector3 to local space
-        moveDirection = transform.TransformDirection(moveDirection);
-        //Set the velocity, so you can move
-        r.velocity = new Vector3(moveDirection.x, moveDirection.y, moveDirection.z);
+        _currentIncreaseMem += Time.fixedDeltaTime * (_speedAccelerationFactor - 1);
+        _currentIncrease = Time.fixedDeltaTime + Mathf.Pow(_currentIncreaseMem, 3) * Time.fixedDeltaTime;
+    }
 
-        //Camera follow
-        mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, cameraPosition.position, Time.deltaTime * cameraSmooth);
-        mainCamera.transform.rotation = Quaternion.Lerp(mainCamera.transform.rotation, cameraPosition.rotation, Time.deltaTime * cameraSmooth);
+    Vector3 deltaPosition;
+    float currentSpeed;
 
-        //Rotation
-        float rotationZTmp = 0;
-        if (Input.GetKey(KeyCode.A))
-        {
-            rotationZTmp = 1;
-        }
-        else if (Input.GetKey(KeyCode.D))
-        {
-            rotationZTmp = -1;
-        }
-        mouseXSmooth = Mathf.Lerp(mouseXSmooth, Input.GetAxis("Mouse X") * rotationSpeed, Time.deltaTime * cameraSmooth);
-        mouseYSmooth = Mathf.Lerp(mouseYSmooth, Input.GetAxis("Mouse Y") * rotationSpeed, Time.deltaTime * cameraSmooth);
-        Quaternion localRotation = Quaternion.Euler(-mouseYSmooth, mouseXSmooth, rotationZTmp * rotationSpeed);
-        lookRotation = lookRotation * localRotation;
-        transform.rotation = lookRotation;
-        rotationZ -= mouseXSmooth;
-        rotationZ = Mathf.Clamp(rotationZ, -45, 45);
-        spaceshipRoot.transform.localEulerAngles = new Vector3(defaultShipRotation.x, defaultShipRotation.y, rotationZ);
-        rotationZ = Mathf.Lerp(rotationZ, defaultShipRotation.z, Time.deltaTime * cameraSmooth);
+    private void Update()
+    {
+        if (!_active)
+            return;
 
-        //Update crosshair texture
-        if (crosshairTexture)
+        // Movement
+        if (_enableMovement)
         {
-            crosshairTexture.position = mainCamera.WorldToScreenPoint(transform.position + transform.forward * 100);
+            currentSpeed = _movementSpeed;
+            deltaPosition = Vector3.zero;
+
+            if (Input.GetKey(_boostSpeed))
+                currentSpeed = _boostedSpeed;
+
+            if (Input.GetKey(KeyCode.W))
+                deltaPosition += transform.forward;
+
+            if (Input.GetKey(KeyCode.S))
+                deltaPosition -= transform.forward;
+
+            if (Input.GetKey(KeyCode.A))
+                deltaPosition -= transform.right;
+
+            if (Input.GetKey(KeyCode.D))
+                deltaPosition += transform.right;
+
+            if (Input.GetKey(_moveUp))
+                deltaPosition += transform.up;
+
+            if (Input.GetKey(_moveDown))
+                deltaPosition -= transform.up;
+
         }
+
+
+        // Return to init position
+        if (Input.GetKeyDown(_initPositonButton))
+        {
+            transform.position = _initPosition;
+            transform.eulerAngles = _initRotation;
+        }
+
+        // Rotation
+        if (_enableRotation)
+        {
+            // Pitch
+            r.MoveRotation(r.rotation * Quaternion.AngleAxis(
+                -Input.GetAxis("Mouse Y") * _mouseSense,
+                Vector3.right)
+            );
+
+            // Paw
+
+            r.MoveRotation(Quaternion.Euler(
+                r.rotation.eulerAngles.x,
+                r.rotation.eulerAngles.y + Input.GetAxis("Mouse X") * _mouseSense,
+                r.rotation.eulerAngles.z)
+            );
+        }
+
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            SceneManager.LoadScene("MainMenu");
+        }
+    }
+
+
+    private void FixedUpdate()
+    {
+        CalculateCurrentIncrease(deltaPosition != Vector3.zero);
+
+        r.MovePosition(transform.position + (deltaPosition * currentSpeed * _currentIncrease));
+
     }
 }
